@@ -3,8 +3,8 @@ Description=Run DTEK emergency outages monitor periodically
 
 [Timer]
 OnBootSec=1min
-# Starts the next check 7 minutes after the previous one finished
-OnUnitInactiveSec=7min
+# Starts the next check 5 minutes after the previous one finished
+OnUnitInactiveSec=5min
 
 [Install]
 WantedBy=timers.target
