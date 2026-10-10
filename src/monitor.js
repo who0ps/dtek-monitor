@@ -126,6 +126,12 @@ export async function fetchEmergencyOutagesNotice({
 
     await browserPage.goto(SHUTDOWNS_PAGE, { waitUntil: "load" })
 
+    // Sanity check: the genuine DTEK page contains this meta tag. If it is
+    // missing (WAF challenge, error page), fail instead of reporting "no notice".
+    await browserPage.waitForSelector('meta[name="csrf-token"]', {
+      state: "attached",
+    })
+
     const notice = await getEmergencyOutagesNotice(browserPage)
 
     log("✅ Getting emergency outages notice finished.")

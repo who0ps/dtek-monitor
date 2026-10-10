@@ -54,7 +54,8 @@ Node.js version. The project has no compilation step.
 
 - Only the general emergency notice is handled. Keep browser cleanup in
   `finally`. A failed or uncertain notice check must throw, never be treated as
-  "no notice".
+  "no notice". The wait for `meta[name="csrf-token"]` is that guard (the page
+  is the genuine one); do not remove it.
 - When the notice disappears, delete its Telegram notification without sending
   a cancellation message; reset `active` only after successful deletion.
 - Continue editing the same existing message across calendar-date changes.

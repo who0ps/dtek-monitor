@@ -99,6 +99,7 @@ test("closes the browser and returns null when there is no notice", async () => 
   let browserClosed = false
   const browserPage = {
     goto: async () => {},
+    waitForSelector: async () => {},
     locator: (selector, { hasText }) => {
       assert.equal(selector, ".m-attention__text")
       assert.equal(hasText.test("Інформація для споживачів"), false)
@@ -121,6 +122,32 @@ test("closes the browser and returns null when there is no notice", async () => 
   }
 
   assert.equal(await fetchEmergencyOutagesNotice({ browserType }), null)
+  assert.equal(browserClosed, true)
+})
+
+test("fails instead of reporting no notice when the real page is not loaded", async () => {
+  let browserClosed = false
+  let noticeChecked = false
+  const browserType = {
+    launch: async () => ({
+      close: async () => {
+        browserClosed = true
+      },
+      newPage: async () => ({
+        goto: async () => {},
+        locator: () => {
+          noticeChecked = true
+        },
+        waitForSelector: async () => Promise.reject(Error("Timeout 30000ms")),
+      }),
+    }),
+  }
+
+  await assert.rejects(
+    fetchEmergencyOutagesNotice({ browserType }),
+    /Timeout 30000ms/,
+  )
+  assert.equal(noticeChecked, false)
   assert.equal(browserClosed, true)
 })
 
