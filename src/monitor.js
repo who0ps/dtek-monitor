@@ -10,6 +10,7 @@ import {
   STREET,
   TELEGRAM_BOT_TOKEN,
   TELEGRAM_CHAT_ID,
+  TELEGRAM_THREAD_ID,
 } from "./constants.js"
 
 import {
@@ -337,6 +338,7 @@ export async function sendNotification(
     loadLastMessageFn = loadLastMessage,
     saveLastMessageFn = saveLastMessage,
     telegramBotToken = TELEGRAM_BOT_TOKEN,
+    telegram_thread_id = TELEGRAM_THREAD_ID,
     telegramChatId = TELEGRAM_CHAT_ID,
   } = {},
 ) {
@@ -357,6 +359,7 @@ export async function sendNotification(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: telegramChatId,
+          message_thread_id: telegram_thread_id,
           text: message,
           parse_mode: "HTML",
           message_id: lastMessage.message_id ?? undefined,
