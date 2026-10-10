@@ -1,15 +1,15 @@
-name: Run power outages monitor
+name: Run emergency outages monitor
 
 on:
   schedule:
-    - cron: "*/6 * * * *"
+    - cron: "*/7 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: power-outages-monitor
+  group: emergency-outages-monitor
   cancel-in-progress: false
 
 jobs:
