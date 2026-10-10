@@ -10,7 +10,6 @@ import {
   getEmergencyOutagesAction,
   loadEmergencyOutagesState,
   loadLastMessage,
-  migrateEmergencyOutagesMessageState,
   saveEmergencyOutagesState,
   saveLastMessage,
 } from "../src/helpers.js"
@@ -76,40 +75,6 @@ test("falls back safely when state files are corrupted", () => {
 
   assert.equal(loadLastMessage(lastMessageFile), null)
   assert.equal(loadEmergencyOutagesState(emergencyStateFile), false)
-})
-
-test("migrates an active emergency notification to independent state", () => {
-  const lastMessageFile = path.join(temporaryDirectory, "last-message.json")
-  const emergencyStateFile = path.join(
-    temporaryDirectory,
-    "emergency-outages.json",
-  )
-  const emergencyMessageFile = path.join(
-    temporaryDirectory,
-    "emergency-outages-message.json",
-  )
-  const lastMessage = { date: Date.now() / 1000, message_id: 456 }
-  saveLastMessage(lastMessage, lastMessageFile)
-  saveEmergencyOutagesState(true, emergencyStateFile)
-
-  assert.equal(
-    migrateEmergencyOutagesMessageState({
-      emergencyMessageFile,
-      emergencyStateFile,
-      lastMessageFile,
-    }),
-    true,
-  )
-  assert.deepEqual(loadLastMessage(emergencyMessageFile), lastMessage)
-  assert.deepEqual(loadLastMessage(lastMessageFile), {})
-  assert.equal(
-    migrateEmergencyOutagesMessageState({
-      emergencyMessageFile,
-      emergencyStateFile,
-      lastMessageFile,
-    }),
-    false,
-  )
 })
 
 test("preserves message state across Kyiv calendar dates", () => {

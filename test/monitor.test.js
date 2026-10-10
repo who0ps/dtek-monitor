@@ -2,37 +2,13 @@ import assert from "node:assert/strict"
 import test, { afterEach, beforeEach, mock } from "node:test"
 
 import {
-  checkIsOutage,
-  checkIsScheduled,
   deleteLastNotification,
+  fetchEmergencyOutagesNotice,
   generateEmergencyOutagesMessage,
-  generateMessage,
   getEmergencyOutagesNotice,
-  getInfo,
   run,
   sendNotification,
 } from "../src/monitor.js"
-import {
-  EMERGENCY_OUTAGES_MESSAGE_FILE,
-  LAST_MESSAGE_FILE,
-} from "../src/constants.js"
-
-const house = "1"
-
-function createInfo(subType = "", overrides = {}) {
-  return {
-    data: {
-      [house]: {
-        sub_type: subType,
-        start_date: "",
-        end_date: "",
-        type: "",
-        ...overrides,
-      },
-    },
-    updateTimestamp: "08.10.2026 12:00",
-  }
-}
 
 beforeEach(() => {
   mock.method(console, "log", () => {})
@@ -40,49 +16,6 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restoreAll()
-})
-
-test("classifies scheduled, emergency, and unscheduled outages", () => {
-  const noOutage = createInfo()
-  const scheduled = createInfo("Планове", { start_date: "10:00" })
-  const emergency = createInfo("Екстрене")
-  const unscheduled = createInfo("Аварійне")
-
-  assert.equal(checkIsOutage(noOutage, house), false)
-  assert.equal(checkIsOutage(scheduled, house), true)
-  assert.equal(checkIsScheduled(scheduled, house), true)
-  assert.equal(checkIsScheduled(emergency, house), false)
-  assert.equal(checkIsScheduled(unscheduled, house), false)
-})
-
-test("reports a missing configured house without a type error", () => {
-  assert.throws(
-    () => checkIsOutage({ data: {} }, house),
-    /configured house is missing/,
-  )
-  assert.throws(
-    () => checkIsScheduled({ data: {} }, house),
-    /configured house is missing/,
-  )
-})
-
-test("escapes address and DTEK values in an outage message", () => {
-  const info = createInfo("Аварійне & <небезпечне>", {
-    start_date: "10:00 & later",
-    end_date: "<unknown>",
-  })
-  info.updateTimestamp = '12:00 "today"'
-
-  const message = generateMessage(info, {
-    street: "Street & <name>",
-    house,
-  })
-
-  assert.match(message, /Street &amp; &lt;name&gt;/)
-  assert.match(message, /10:00 &amp; later/)
-  assert.match(message, /&lt;unknown&gt;/)
-  assert.match(message, /Аварійне &amp; &lt;небезпечне&gt;/)
-  assert.match(message, /12:00 &quot;today&quot;/)
 })
 
 test("escapes a general emergency outages notice", () => {
@@ -147,39 +80,6 @@ test("extracts all paragraphs from a general emergency outages notice", async ()
   })
 })
 
-test("closes the browser and reports a failed DTEK response", async () => {
-  let browserClosed = false
-  mock.method(globalThis, "fetch", async () => ({
-    ok: false,
-    status: 503,
-  }))
-  const browserPage = {
-    evaluate: async (callback, value) => callback(value),
-    goto: async () => {},
-    locator: () => ({
-      count: async () => 0,
-      waitFor: async () => Promise.reject(Error("missing")),
-    }),
-    waitForSelector: async () => ({
-      getAttribute: async () => "csrf-token",
-    }),
-  }
-  const browserType = {
-    launch: async () => ({
-      close: async () => {
-        browserClosed = true
-      },
-      newPage: async () => browserPage,
-    }),
-  }
-
-  await assert.rejects(
-    getInfo({ browserType }),
-    /DTEK request failed with status 503/,
-  )
-  assert.equal(browserClosed, true)
-})
-
 test("reports an uncertain emergency notice check instead of treating it as absent", async () => {
   const browserPage = {
     locator: () => ({
@@ -194,10 +94,10 @@ test("reports an uncertain emergency notice check instead of treating it as abse
   )
 })
 
-test("ignores a general modal without an emergency outages notice", async () => {
-  const expectedInfo = createInfo("Аварійне")
+
+test("closes the browser and returns null when there is no notice", async () => {
+  let browserClosed = false
   const browserPage = {
-    evaluate: async () => expectedInfo,
     goto: async () => {},
     locator: (selector, { hasText }) => {
       assert.equal(selector, ".m-attention__text")
@@ -210,21 +110,38 @@ test("ignores a general modal without an emergency outages notice", async () => 
         waitFor: async () => Promise.reject(Error("missing")),
       }
     },
-    waitForSelector: async () => ({
-      getAttribute: async () => "csrf-token",
-    }),
   }
   const browserType = {
     launch: async () => ({
-      close: async () => {},
+      close: async () => {
+        browserClosed = true
+      },
       newPage: async () => browserPage,
     }),
   }
 
-  assert.deepEqual(await getInfo({ browserType }), {
-    ...expectedInfo,
-    emergencyOutagesNotice: null,
-  })
+  assert.equal(await fetchEmergencyOutagesNotice({ browserType }), null)
+  assert.equal(browserClosed, true)
+})
+
+test("closes the browser when the page fails to load", async () => {
+  let browserClosed = false
+  const browserType = {
+    launch: async () => ({
+      close: async () => {
+        browserClosed = true
+      },
+      newPage: async () => ({
+        goto: async () => Promise.reject(Error("net::ERR_TIMED_OUT")),
+      }),
+    }),
+  }
+
+  await assert.rejects(
+    fetchEmergencyOutagesNotice({ browserType }),
+    /net::ERR_TIMED_OUT/,
+  )
+  assert.equal(browserClosed, true)
 })
 
 test("deletes a Telegram notification only after a successful response", async () => {
@@ -233,43 +150,13 @@ test("deletes a Telegram notification only after a successful response", async (
     clearLastMessageFn: () => {
       cleared = true
     },
-    fetchFn: async () => ({
-      json: async () => ({ ok: true }),
-      ok: true,
-    }),
+    fetchFn: async () => ({ json: async () => ({ ok: true }), ok: true }),
     loadLastMessageFn: () => ({ message_id: 123 }),
     telegramBotToken: "token",
     telegramChatId: "chat",
   })
 
   assert.equal(deleted, true)
-  assert.equal(cleared, true)
-})
-
-test("deletes a previous-day notification after an outage ends", async () => {
-  let cleared = false
-  let requestBody
-  const deleted = await deleteLastNotification({
-    clearLastMessageFn: () => {
-      cleared = true
-    },
-    fetchFn: async (_url, options) => {
-      requestBody = JSON.parse(options.body)
-      return {
-        json: async () => ({ ok: true }),
-        ok: true,
-      }
-    },
-    loadLastMessageFn: () => ({
-      date: Date.parse("2026-10-08T20:51:00Z") / 1000,
-      message_id: 123,
-    }),
-    telegramBotToken: "token",
-    telegramChatId: "chat",
-  })
-
-  assert.equal(deleted, true)
-  assert.equal(requestBody.message_id, 123)
   assert.equal(cleared, true)
 })
 
@@ -292,13 +179,51 @@ test("keeps Telegram state when deletion fails", async () => {
   assert.equal(cleared, false)
 })
 
-test("keeps the previous Telegram notification when an update fails", async () => {
-  let deleted = false
+test("sends a new notification and saves its message", async () => {
+  const requests = []
+  const saved = []
+  const result = { date: 1, message_id: 7 }
+  const sent = await sendNotification("text", {
+    fetchFn: async (url, options) => {
+      requests.push([url, JSON.parse(options.body)])
+      return { json: async () => ({ ok: true, result }), ok: true }
+    },
+    loadLastMessageFn: () => ({}),
+    saveLastMessageFn: (message) => saved.push(message),
+    telegramBotToken: "token",
+    telegramChatId: "chat",
+  })
+
+  assert.equal(sent, true)
+  assert.match(requests[0][0], /\/sendMessage$/)
+  assert.equal(requests[0][1].message_id, undefined)
+  assert.deepEqual(saved, [result])
+})
+
+test("edits the previous notification instead of sending a new one", async () => {
+  const requests = []
+  const sent = await sendNotification("update", {
+    fetchFn: async (url, options) => {
+      requests.push([url, JSON.parse(options.body)])
+      return {
+        json: async () => ({ ok: true, result: { message_id: 123 } }),
+        ok: true,
+      }
+    },
+    loadLastMessageFn: () => ({ message_id: 123 }),
+    saveLastMessageFn: () => {},
+    telegramBotToken: "token",
+    telegramChatId: "chat",
+  })
+
+  assert.equal(sent, true)
+  assert.match(requests[0][0], /\/editMessageText$/)
+  assert.equal(requests[0][1].message_id, 123)
+})
+
+test("keeps the previous notification when an update fails", async () => {
   let saved = false
   const sent = await sendNotification("message", {
-    deleteLastNotificationFn: async () => {
-      deleted = true
-    },
     fetchFn: async () => ({
       json: async () => ({ ok: false, description: "failed" }),
       ok: false,
@@ -312,87 +237,20 @@ test("keeps the previous Telegram notification when an update fails", async () =
   })
 
   assert.equal(sent, false)
-  assert.equal(deleted, false)
   assert.equal(saved, false)
 })
 
-for (const [notificationType, lastMessageFile] of [
-  ["address outage", LAST_MESSAGE_FILE],
-  ["general emergency outage", EMERGENCY_OUTAGES_MESSAGE_FILE],
-]) {
-  test(`updates a previous-day ${notificationType} notification`, async () => {
-    let deleted = false
-    const requests = []
-    const savedMessages = []
-    const sent = await sendNotification("current update", {
-      deleteLastNotificationFn: async () => {
-        deleted = true
-        return true
-      },
-      fetchFn: async (url, options) => {
-        requests.push([url, JSON.parse(options.body)])
-        return {
-          json: async () => ({
-            ok: true,
-            result: {
-              date: Date.parse("2026-10-08T20:51:00Z") / 1000,
-              edit_date: Date.parse("2026-10-08T21:01:00Z") / 1000,
-              message_id: 123,
-            },
-          }),
-          ok: true,
-        }
-      },
-      lastMessageFile,
-      loadLastMessageFn: () => ({
-        date: Date.parse("2026-10-08T20:51:00Z") / 1000,
-        message_id: 123,
-      }),
-      saveLastMessageFn: (message, savedFile) => {
-        savedMessages.push([message, savedFile])
-      },
-      telegramBotToken: "token",
-      telegramChatId: "chat",
-    })
-
-    assert.equal(sent, true)
-    assert.equal(deleted, false)
-    assert.match(requests[0][0], /\/editMessageText$/)
-    assert.equal(requests[0][1].message_id, 123)
-    assert.deepEqual(savedMessages, [
-      [
-        {
-          date: Date.parse("2026-10-08T20:51:00Z") / 1000,
-          edit_date: Date.parse("2026-10-08T21:01:00Z") / 1000,
-          message_id: 123,
-        },
-        lastMessageFile,
-      ],
-    ])
-  })
-}
-
-test("keeps an unchanged general emergency notification", async () => {
-  let deleted = false
-  let loadedFile
+test("keeps an unchanged emergency notification", async () => {
   let saved = false
   const sent = await sendNotification("same message", {
-    deleteLastNotificationFn: async () => {
-      deleted = true
-    },
     fetchFn: async () => ({
       json: async () => ({
         ok: false,
-        description:
-          "Bad Request: message is not modified: specified new message content and reply markup are exactly the same",
+        description: "Bad Request: message is not modified",
       }),
       ok: false,
     }),
-    lastMessageFile: EMERGENCY_OUTAGES_MESSAGE_FILE,
-    loadLastMessageFn: (lastMessageFile) => {
-      loadedFile = lastMessageFile
-      return { message_id: 123 }
-    },
+    loadLastMessageFn: () => ({ message_id: 123 }),
     saveLastMessageFn: () => {
       saved = true
     },
@@ -401,110 +259,72 @@ test("keeps an unchanged general emergency notification", async () => {
   })
 
   assert.equal(sent, true)
-  assert.equal(deleted, false)
-  assert.equal(loadedFile, EMERGENCY_OUTAGES_MESSAGE_FILE)
   assert.equal(saved, false)
 })
 
-test("updates general emergency and address outage notifications independently", async () => {
-  const savedStates = []
-  const messages = []
-  await run({
-    checkIsOutageFn: () => true,
-    checkIsScheduledFn: () => false,
-    generateEmergencyOutagesMessageFn: (notice) => `notice: ${notice}`,
-    generateMessageFn: () => "address outage",
-    getInfoFn: async () => ({
-      ...createInfo("Аварійне"),
-      emergencyOutagesNotice: "Emergency",
-    }),
-    loadEmergencyOutagesStateFn: () => false,
-    saveEmergencyOutagesStateFn: (active) => savedStates.push(active),
-    sendNotificationFn: async (message, { lastMessageFile }) => {
-      messages.push([message, lastMessageFile])
-    },
-  })
-
-  assert.deepEqual(savedStates, [true])
-  assert.deepEqual(messages, [
-    ["notice: Emergency", EMERGENCY_OUTAGES_MESSAGE_FILE],
-    ["address outage", LAST_MESSAGE_FILE],
-  ])
+test("rejects sending without Telegram credentials", async () => {
+  await assert.rejects(
+    sendNotification("text", { telegramBotToken: "", telegramChatId: "chat" }),
+    /Missing telegram bot token/,
+  )
+  await assert.rejects(
+    sendNotification("text", { telegramBotToken: "token", telegramChatId: "" }),
+    /Missing telegram chat id/,
+  )
 })
 
-test("sends only unscheduled address outage notifications", async () => {
-  const messages = []
-  const baseDependencies = {
-    generateMessageFn: () => "outage",
-    getInfoFn: async () => ({ data: {} }),
-    loadEmergencyOutagesStateFn: () => false,
-    sendNotificationFn: async (message) => messages.push(message),
+function createRunDeps({ notice, wasActive }) {
+  const calls = { deleted: 0, sent: [], states: [] }
+  return {
+    calls,
+    deps: {
+      deleteLastNotificationFn: async () => {
+        calls.deleted += 1
+        return calls.deleteResult ?? true
+      },
+      fetchNoticeFn: async () => notice,
+      generateEmergencyOutagesMessageFn: () => "generated",
+      loadEmergencyOutagesStateFn: () => wasActive,
+      saveEmergencyOutagesStateFn: (active) => calls.states.push(active),
+      sendNotificationFn: async (message) => calls.sent.push(message),
+    },
   }
+}
 
-  await run({
-    ...baseDependencies,
-    checkIsOutageFn: () => true,
-    checkIsScheduledFn: () => true,
+test("run sends a notification when an emergency notice appears", async () => {
+  const { calls, deps } = createRunDeps({
+    notice: { segments: [{ text: "x", bold: false }] },
+    wasActive: false,
   })
-  await run({
-    ...baseDependencies,
-    checkIsOutageFn: () => true,
-    checkIsScheduledFn: () => false,
-  })
+  await run(deps)
 
-  assert.deepEqual(messages, ["outage"])
+  assert.deepEqual(calls.sent, ["generated"])
+  assert.deepEqual(calls.states, [true])
+  assert.equal(calls.deleted, 0)
 })
 
-test("deletes the previous address notification when no outage remains", async () => {
-  let deleted = false
-  await run({
-    checkIsOutageFn: () => false,
-    checkIsScheduledFn: () => true,
-    deleteLastNotificationFn: async () => {
-      deleted = true
-    },
-    getInfoFn: async () => ({ data: {} }),
-    loadEmergencyOutagesStateFn: () => false,
-  })
+test("run deletes the notification and resets state when the notice is gone", async () => {
+  const { calls, deps } = createRunDeps({ notice: null, wasActive: true })
+  await run(deps)
 
-  assert.equal(deleted, true)
+  assert.equal(calls.deleted, 1)
+  assert.deepEqual(calls.states, [false])
+  assert.deepEqual(calls.sent, [])
 })
 
-test("resets emergency state only after its notification is deleted", async () => {
-  const savedStates = []
-  const deletedFiles = []
-  await run({
-    checkIsOutageFn: () => true,
-    checkIsScheduledFn: () => true,
-    deleteLastNotificationFn: async ({ lastMessageFile }) => {
-      deletedFiles.push(lastMessageFile)
-      return true
-    },
-    getInfoFn: async () => ({
-      ...createInfo("Планове"),
-      emergencyOutagesNotice: null,
-    }),
-    loadEmergencyOutagesStateFn: () => true,
-    saveEmergencyOutagesStateFn: (active) => savedStates.push(active),
-  })
+test("run keeps the active state when deletion fails", async () => {
+  const { calls, deps } = createRunDeps({ notice: null, wasActive: true })
+  calls.deleteResult = false
+  await run(deps)
 
-  assert.deepEqual(savedStates, [false])
-  assert.deepEqual(deletedFiles, [EMERGENCY_OUTAGES_MESSAGE_FILE])
+  assert.deepEqual(calls.states, [])
 })
 
-test("keeps emergency state when its notification cannot be deleted", async () => {
-  const savedStates = []
-  await run({
-    checkIsOutageFn: () => true,
-    checkIsScheduledFn: () => true,
-    deleteLastNotificationFn: async () => false,
-    getInfoFn: async () => ({
-      ...createInfo("Планове"),
-      emergencyOutagesNotice: null,
-    }),
-    loadEmergencyOutagesStateFn: () => true,
-    saveEmergencyOutagesStateFn: (active) => savedStates.push(active),
-  })
+test("run does nothing when there was and is no notice", async () => {
+  const { calls, deps } = createRunDeps({ notice: null, wasActive: false })
+  await run(deps)
 
-  assert.deepEqual(savedStates, [])
+  assert.equal(calls.deleted, 0)
+  assert.deepEqual(calls.states, [])
+  assert.deepEqual(calls.sent, [])
 })

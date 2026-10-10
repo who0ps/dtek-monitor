@@ -1,0 +1,14 @@
+[Unit]
+Description=DTEK emergency outages monitor (single check)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=dtek
+WorkingDirectory=/opt/dtek-monitor
+EnvironmentFile=/opt/dtek-monitor/.env
+Environment=TZ=Europe/Kyiv
+# Adjust the node path if it is not /usr/bin/node (check with: which node)
+ExecStart=/usr/bin/node src/monitor.js
+TimeoutStartSec=300

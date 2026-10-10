@@ -13,26 +13,24 @@ Keep user-facing documentation and notification messages in Ukrainian.
 
 ## Project
 
-DTEK Monitor checks power outages for an address in Kyiv and sends or updates
-Telegram notifications.
+DTEK Monitor checks the DTEK Kyiv shutdowns page for a general emergency
+notice (emergency outages, outage schedules not in effect) and sends, updates,
+or deletes a Telegram notification. It has no address-specific logic.
 
 Stack: Node.js 22, JavaScript ES modules, Playwright Chromium, built-in `fetch`,
-Docker Compose, and GitHub Actions. Check `.nvmrc` and `package.json` for the
+and systemd on the server. Check `.nvmrc` and `package.json` for the
 Node.js version. The project has no compilation step.
 
 ## Repository map
 
 | Path | Purpose |
 | --- | --- |
-| `src/monitor.js` | Browser automation, DTEK requests, outage detection, Telegram API, and a single monitoring run |
+| `src/monitor.js` | Browser automation, emergency notice detection, Telegram API, and a single monitoring run |
 | `src/helpers.js` | JSON state persistence and date/text formatting |
 | `src/constants.js` | Environment variables, the DTEK URL, and state file paths |
 | `test/*.test.js` | Isolated `node:test` coverage for monitor behavior and state helpers |
-| `artifacts/last-message.json` | Last Telegram message state: `message_id` and `date` |
-| `artifacts/emergency-outages.json` | General emergency outage notice state: `active`; created at runtime |
-| `docker-entrypoint.sh` | Monitoring loop, interval, signal handling, and execution of supplied commands |
-| `Dockerfile`, `compose.yaml`, `.dockerignore` | Chromium image, container configuration, and persistent state volume |
-| `.github/workflows/monitor.yml` | Checks every 10 minutes and commits updated state to the repository |
+| `artifacts/` | Runtime state, git-ignored: `emergency-outages.json` (`active`) and `emergency-outages-message.json` (`message_id`, `date`) |
+| `deploy/` | Example systemd service and timer for running on a server |
 | `.env.example` | Configuration template without secrets |
 | `README.md` | User setup and usage documentation |
 
@@ -54,26 +52,19 @@ Node.js version. The project has no compilation step.
 
 ## Behavior to account for
 
-- Monitoring supports Kyiv. Preserve the browser context for `/ua/ajax`
-  requests, CSRF token retrieval, and browser cleanup in `finally`.
-- The general emergency outage notice takes priority over address-specific
-  requests. When it disappears, delete its Telegram notification without
-  sending a cancellation message; reset `active` only after successful deletion.
-- Address-specific notifications cover emergency and unscheduled outage
-  categories. Scheduled outages must not trigger notifications.
+- Only the general emergency notice is handled. Keep browser cleanup in
+  `finally`. A failed or uncertain notice check must throw, never be treated as
+  "no notice".
+- When the notice disappears, delete its Telegram notification without sending
+  a cancellation message; reset `active` only after successful deletion.
 - Continue editing the same existing message across calendar-date changes.
-  Clear its state only after the corresponding notification is successfully
-  deleted. Format user-facing dates in the `Europe/Kyiv` time zone.
+  Format user-facing dates in the `Europe/Kyiv` time zone.
 - Telegram uses `parse_mode: "HTML"`. When changing message generation,
-  account for escaping external data and address values.
+  account for escaping external data.
 - Preserve JSON state compatibility and first-run behavior without state
   files. Do not modify live `artifacts/` as a side effect of code validation.
-- The local script performs a single check. In Docker, the
-  `CHECK_INTERVAL_SECONDS` delay starts after the check completes
-  (600 seconds by default). GitHub Actions runs separate checks on a cron.
-- Docker runs as the `node` user and stores state in
-  `monitor-state:/app/artifacts`. Account for write permissions, Chromium
-  compatibility with the base image, and process shutdown on `TERM`/`INT`.
+- The script performs a single check; periodic runs are scheduled externally
+  (systemd timer, see `deploy/`).
 
 ## Validation
 
@@ -83,40 +74,26 @@ Check syntax without running the monitor:
 node --check src/constants.js
 node --check src/helpers.js
 node --check src/monitor.js
-sh -n docker-entrypoint.sh
 git diff --check
 ```
 
-For Compose changes, when Docker and the required environment files are
-available, use `docker compose config --quiet` to avoid printing secret values.
-For Dockerfile changes, validate the build with `docker compose build` when
-Docker daemon and network access are available. Starting the container is a
-separate action.
-
-`package.json` provides `start`, `test`, and `watch`; there are no `lint` or
+`package.json` provides `start` and `test`; there are no `lint` or
 `build` commands. Report only checks that actually ran; syntax checks do not
 validate logic. For logic changes, add focused checks using `node:test`, with
 mocked browser, `fetch`, and time, plus a temporary state directory.
 Documentation-only changes do not need new tests.
 
-Relevant scenarios: no outage; scheduled, unscheduled, or emergency outages;
-appearance and cancellation of the general notice; day rollover in Kyiv;
-a missing house in the DTEK response; HTTP/Telegram errors; and missing or
-corrupted state.
+Relevant scenarios: appearance and disappearance of the general notice; day
+rollover in Kyiv; HTTP/Telegram errors; and missing or corrupted state.
 
 ## External services and secrets
 
-- `npm start`, `npm run watch`, `node src/monitor.js`, and starting the Compose
-  service contact DTEK, may send, edit, or delete Telegram messages, and update
+- `npm start` and `node src/monitor.js` contact DTEK, may send, edit, or delete Telegram messages, and update
   state. Importing `src/monitor.js` also starts a check. Use isolated mocks for
   routine validation; run live checks when they are within the user's request.
 - Do not print or commit `.env`, tokens, private addresses, or full Telegram
   URLs containing tokens. Use fictional values in examples.
-- Do not run multiple monitors against the same state concurrently. Do not
-  delete `monitor-state` for testing: `docker compose down -v` removes it.
-- The current workflow commits `artifacts/`, may amend the latest commit,
-  and runs `push --force-with-lease` to `main`. Account for these actions when
-  modifying it; do not trigger it for routine documentation validation.
+- Do not run multiple monitors against the same state concurrently.
 
 ## Skills
 
@@ -124,11 +101,7 @@ Project-local skills are installed in `.agents/skills/`. Read the relevant
 `SKILL.md` before applying a skill:
 
 - [playwright-cli](.agents/skills/playwright-cli/SKILL.md): inspect the DTEK page,
-  DOM, selectors, and network requests.
-- [docker-expert](.agents/skills/docker-expert/SKILL.md): change the image,
-  Compose setup, volume, or container lifecycle.
-- [github-actions-templates](.agents/skills/github-actions-templates/SKILL.md):
-  change workflows, caching, or permissions.
+  DOM and selectors.
 - [javascript-testing-patterns](.agents/skills/javascript-testing-patterns/SKILL.md):
   isolate logic checks and external API calls.
 

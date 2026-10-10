@@ -2,8 +2,8 @@ import fs from "node:fs"
 import path from "node:path"
 
 import {
+  EMERGENCY_OUTAGES_MESSAGE_FILE,
   EMERGENCY_OUTAGES_STATE_FILE,
-  LAST_MESSAGE_FILE,
 } from "./constants.js"
 import { warn } from "./logger.js"
 
@@ -19,12 +19,7 @@ function readJsonFile(file, fallback) {
   }
 }
 
-export function capitalize(str) {
-  if (typeof str !== "string") return ""
-  return str[0].toUpperCase() + str.slice(1).toLowerCase()
-}
-
-export function loadLastMessage(file = LAST_MESSAGE_FILE) {
+export function loadLastMessage(file = EMERGENCY_OUTAGES_MESSAGE_FILE) {
   const lastMessage = readJsonFile(file, null)
   if (!lastMessage) return null
 
@@ -33,7 +28,7 @@ export function loadLastMessage(file = LAST_MESSAGE_FILE) {
 
 export function saveLastMessage(
   { date, message_id } = {},
-  file = LAST_MESSAGE_FILE,
+  file = EMERGENCY_OUTAGES_MESSAGE_FILE,
 ) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(
@@ -45,7 +40,7 @@ export function saveLastMessage(
   )
 }
 
-export function clearLastMessage(file = LAST_MESSAGE_FILE) {
+export function clearLastMessage(file = EMERGENCY_OUTAGES_MESSAGE_FILE) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify({}))
 }
@@ -72,28 +67,6 @@ export function getEmergencyOutagesAction(notice, wereActive) {
   if (notice) return "send"
   if (wereActive) return "delete"
   return null
-}
-
-export function migrateEmergencyOutagesMessageState({
-  emergencyMessageFile,
-  emergencyStateFile = EMERGENCY_OUTAGES_STATE_FILE,
-  lastMessageFile = LAST_MESSAGE_FILE,
-} = {}) {
-  if (!emergencyMessageFile || fs.existsSync(emergencyMessageFile)) {
-    return false
-  }
-
-  if (!loadEmergencyOutagesState(emergencyStateFile)) return false
-
-  const lastMessage = loadLastMessage(lastMessageFile)
-  if (lastMessage) {
-    saveLastMessage(lastMessage, emergencyMessageFile)
-    clearLastMessage(lastMessageFile)
-  } else {
-    clearLastMessage(emergencyMessageFile)
-  }
-
-  return true
 }
 
 export function escapeHtml(value) {

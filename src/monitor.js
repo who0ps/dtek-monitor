@@ -4,24 +4,19 @@ import { chromium } from "playwright"
 
 import {
   EMERGENCY_OUTAGES_MESSAGE_FILE,
-  HOUSE,
-  LAST_MESSAGE_FILE,
   SHUTDOWNS_PAGE,
-  STREET,
   TELEGRAM_BOT_TOKEN,
   TELEGRAM_CHAT_ID,
   TELEGRAM_THREAD_ID,
 } from "./constants.js"
 
 import {
-  capitalize,
   clearLastMessage,
   escapeHtml,
   getEmergencyOutagesAction,
   getCurrentTime,
   loadEmergencyOutagesState,
   loadLastMessage,
-  migrateEmergencyOutagesMessageState,
   saveEmergencyOutagesState,
   saveLastMessage,
 } from "./helpers.js"
@@ -119,141 +114,27 @@ export async function getEmergencyOutagesNotice(browserPage) {
   }
 }
 
-export async function getInfo({ browserType = chromium } = {}) {
-  log("🌀 Getting info...")
+export async function fetchEmergencyOutagesNotice({
+  browserType = chromium,
+} = {}) {
+  log("🌀 Getting emergency outages notice...")
 
   const browser = await browserType.launch({ headless: true })
 
   try {
     const browserPage = await browser.newPage()
 
-    await browserPage.goto(SHUTDOWNS_PAGE, {
-      waitUntil: "load",
-    })
+    await browserPage.goto(SHUTDOWNS_PAGE, { waitUntil: "load" })
 
-    const emergencyOutagesNotice =
-      await getEmergencyOutagesNotice(browserPage)
+    const notice = await getEmergencyOutagesNotice(browserPage)
 
-    const csrfTokenTag = await browserPage.waitForSelector(
-      'meta[name="csrf-token"]',
-      { state: "attached" },
-    )
-    const csrfToken = await csrfTokenTag.getAttribute("content")
-
-    const info = await browserPage.evaluate(
-      async ({ STREET, csrfToken }) => {
-        const formData = new URLSearchParams()
-        formData.append("method", "getHomeNum")
-        formData.append("data[0][name]", "street")
-        formData.append("data[0][value]", STREET)
-        formData.append("data[1][name]", "updateFact")
-        formData.append("data[1][value]", new Date().toLocaleString("uk-UA"))
-
-        const response = await fetch("/ua/ajax", {
-          method: "POST",
-          headers: {
-            "x-requested-with": "XMLHttpRequest",
-            "x-csrf-token": csrfToken,
-          },
-          body: formData,
-        })
-
-        if (!response.ok) {
-          throw Error(`DTEK request failed with status ${response.status}.`)
-        }
-
-        return await response.json()
-      },
-      { STREET, csrfToken },
-    )
-
-    log("✅ Getting info finished.")
-    return { ...info, emergencyOutagesNotice }
+    log("✅ Getting emergency outages notice finished.")
+    return notice
   } catch (error) {
-    throw Error(`❌ Getting info failed: ${error.message}`)
+    throw Error(`❌ Getting emergency outages notice failed: ${error.message}`)
   } finally {
     await browser.close()
   }
-}
-
-function getAddressInfo(info, house) {
-  if (!info?.data) {
-    throw Error("❌ Power outage info missed.")
-  }
-
-  const addressInfo = info.data[house]
-  if (
-    !Object.hasOwn(info.data, house) ||
-    !addressInfo ||
-    typeof addressInfo !== "object"
-  ) {
-    throw Error("❌ Power outage info for the configured house is missing.")
-  }
-
-  return addressInfo
-}
-
-export function checkIsOutage(info, house = HOUSE) {
-  log("🌀 Checking power outage...")
-
-  const {
-    sub_type = "",
-    start_date = "",
-    end_date = "",
-    type = "",
-  } = getAddressInfo(info, house)
-  const isOutageDetected = [sub_type, start_date, end_date, type].some(
-    (value) => String(value ?? "").trim() !== "",
-  )
-
-  isOutageDetected
-    ? log("🚨 Power outage detected!")
-    : log("⚡️ No power outage!")
-
-  return isOutageDetected
-}
-
-export function checkIsScheduled(info, house = HOUSE) {
-  log("🌀 Checking whether power outage scheduled...")
-
-  const { sub_type = "" } = getAddressInfo(info, house)
-  const normalizedSubtype = String(sub_type).toLowerCase()
-  const isScheduled =
-    !normalizedSubtype.includes("екстрен") &&
-    !normalizedSubtype.includes("аварій")
-
-  isScheduled
-    ? log("🗓️ Power outage scheduled!")
-    : log("⚠️ Power outage not scheduled!")
-
-  return isScheduled
-}
-
-export function generateMessage(
-  info,
-  { street = STREET, house = HOUSE } = {},
-) {
-  log("🌀 Generating message...")
-
-  const { sub_type = "", start_date = "", end_date = "" } = getAddressInfo(
-    info,
-    house,
-  )
-  const { updateTimestamp } = info || {}
-
-  const address = `${escapeHtml(street)}, ${escapeHtml(house)}`
-  const reason = escapeHtml(capitalize(sub_type))
-
-  return [
-    `⚡️ <b>За адресою ${address} зафіксовано відключення</b>`,
-    "",
-    `🪫 Час початку - ${escapeHtml(start_date)}`,
-    `🔌 Орієнтовний час відновлення - <b>${escapeHtml(end_date)}</b>`,
-    "",
-    `⚠️ <i>${reason}.</i>`,
-    "\n",
-    `🔄 <i>Отримано від DTEK в ${escapeHtml(updateTimestamp)}</i>`,
-  ].join("\n")
 }
 
 export function generateEmergencyOutagesMessage(notice, now = new Date()) {
@@ -285,7 +166,7 @@ export function generateEmergencyOutagesMessage(notice, now = new Date()) {
 export async function deleteLastNotification({
   clearLastMessageFn = clearLastMessage,
   fetchFn = globalThis.fetch,
-  lastMessageFile = LAST_MESSAGE_FILE,
+  lastMessageFile = EMERGENCY_OUTAGES_MESSAGE_FILE,
   loadLastMessageFn = loadLastMessage,
   telegramBotToken = TELEGRAM_BOT_TOKEN,
   telegramChatId = TELEGRAM_CHAT_ID,
@@ -334,7 +215,7 @@ export async function sendNotification(
   message,
   {
     fetchFn = globalThis.fetch,
-    lastMessageFile = LAST_MESSAGE_FILE,
+    lastMessageFile = EMERGENCY_OUTAGES_MESSAGE_FILE,
     loadLastMessageFn = loadLastMessage,
     saveLastMessageFn = saveLastMessage,
     telegramBotToken = TELEGRAM_BOT_TOKEN,
@@ -392,58 +273,32 @@ export async function sendNotification(
 }
 
 export async function run({
-  checkIsOutageFn = checkIsOutage,
-  checkIsScheduledFn = checkIsScheduled,
   deleteLastNotificationFn = deleteLastNotification,
+  fetchNoticeFn = fetchEmergencyOutagesNotice,
   generateEmergencyOutagesMessageFn = generateEmergencyOutagesMessage,
-  generateMessageFn = generateMessage,
-  getInfoFn = getInfo,
   loadEmergencyOutagesStateFn = loadEmergencyOutagesState,
   saveEmergencyOutagesStateFn = saveEmergencyOutagesState,
   sendNotificationFn = sendNotification,
 } = {}) {
-  const info = await getInfoFn()
-  const emergencyOutagesWereActive = loadEmergencyOutagesStateFn()
-  const emergencyOutagesAction = getEmergencyOutagesAction(
-    info.emergencyOutagesNotice,
-    emergencyOutagesWereActive,
-  )
+  const notice = await fetchNoticeFn()
+  const wereActive = loadEmergencyOutagesStateFn()
+  const action = getEmergencyOutagesAction(notice, wereActive)
 
-  if (emergencyOutagesAction === "send") {
+  if (action === "send") {
     saveEmergencyOutagesStateFn(true)
-    const message = generateEmergencyOutagesMessageFn(
-      info.emergencyOutagesNotice,
-    )
-    await sendNotificationFn(message, {
-      lastMessageFile: EMERGENCY_OUTAGES_MESSAGE_FILE,
-    })
+    await sendNotificationFn(generateEmergencyOutagesMessageFn(notice))
   }
 
-  if (emergencyOutagesAction === "delete") {
-    const notificationDeleted = await deleteLastNotificationFn({
-      lastMessageFile: EMERGENCY_OUTAGES_MESSAGE_FILE,
-    })
-    if (notificationDeleted) {
-      saveEmergencyOutagesStateFn(false)
-    }
-  }
-
-  const isOutage = checkIsOutageFn(info)
-  const isScheduled = checkIsScheduledFn(info)
-  if (isOutage && !isScheduled) {
-    const message = generateMessageFn(info)
-    await sendNotificationFn(message, { lastMessageFile: LAST_MESSAGE_FILE })
-  }
-
-  if (!isOutage) {
-    await deleteLastNotificationFn({ lastMessageFile: LAST_MESSAGE_FILE })
+  if (action === "delete") {
+    const deleted = await deleteLastNotificationFn()
+    if (deleted) saveEmergencyOutagesStateFn(false)
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  migrateEmergencyOutagesMessageState({
-    emergencyMessageFile: EMERGENCY_OUTAGES_MESSAGE_FILE,
-  })
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   run().catch((error) => {
     logError(error.message)
     process.exitCode = 1
