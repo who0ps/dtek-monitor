@@ -252,7 +252,7 @@ export function generateMessage(
     "",
     `⚠️ <i>${reason}.</i>`,
     "\n",
-    `🔄 <i>Дата оновлення інформації – ${escapeHtml(updateTimestamp)}</i>`,
+    `🔄 <i>Отримано від DTEK в ${escapeHtml(updateTimestamp)}</i>`,
   ].join("\n")
 }
 
@@ -278,7 +278,7 @@ export function generateEmergencyOutagesMessage(notice, now = new Date()) {
   return [
     formattedNotice,
     "",
-    `🔄 <i>Дата оновлення інформації – ${getCurrentTime(now)}</i>`,
+    `🔄 <i>Отримано від DTEK в ${getCurrentTime(now)}</i>`,
   ].join("\n")
 }
 
