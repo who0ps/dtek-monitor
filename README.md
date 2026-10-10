@@ -16,29 +16,26 @@
 
 ## Встановлення на сервері
 
+Приклад для користувача `ubuntu` (змініть `User=` у
+`deploy/dtek-monitor.service`, якщо використовуєте іншого).
+
 ```bash
-sudo useradd --system --create-home --shell /usr/sbin/nologin dtek
 sudo git clone https://github.com/who0ps/dtek-monitor /opt/dtek-monitor
-sudo chown -R dtek:dtek /opt/dtek-monitor
+sudo chown -R ubuntu:ubuntu /opt/dtek-monitor
 cd /opt/dtek-monitor
 
-# залежності та браузер (від імені користувача dtek)
-sudo -u dtek npm ci --omit=dev
-sudo -u dtek npx playwright install chromium
-# системні бібліотеки для Chromium (потребує root)
-sudo npx playwright install-deps chromium
-
-# налаштування
-sudo -u dtek cp .env.example .env
-sudo -u dtek nano .env
+npm ci --omit=dev
+cp .env.example .env
+nano .env
 ```
 
-Playwright зберігає браузери в `~/.cache/ms-playwright` користувача, від якого
-виконано `playwright install`. Якщо Chromium уже встановлено (наприклад, через
-Python-версію Playwright) для того ж користувача, Node-версія використає його
-лише за збігу ревізії браузера; інакше завантажить свою копію поруч. Щоб
-використовувати вже наявного користувача, змініть `User=` у
-`dtek-monitor.service` і виконайте встановлення від його імені.
+Версія `playwright` у `package.json` зафіксована (1.63.0) і має збігатися з
+версією, якою встановлено Chromium (`~/.cache/ms-playwright/chromium-<ревізія>`
+для того самого користувача; ревізія 1243 для 1.63.0). Якщо Chromium уже
+встановлено (наприклад, Python-версією Playwright тієї ж версії), додатково
+нічого встановлювати не треба. Інакше виконайте `npx playwright install chromium`
+від імені користувача, під яким працює сервіс. Якщо Playwright не підтримує вашу
+платформу, вкажіть шлях до власного Chromium у `CHROMIUM_EXECUTABLE_PATH`.
 
 Змінні в `.env`:
 

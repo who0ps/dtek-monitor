@@ -39,6 +39,7 @@ Node.js version. The project has no compilation step.
 - Read the relevant files and check `git status --short` before making changes.
   Preserve existing user changes and keep the diff within the task's scope.
 - Use npm and `package-lock.json`. Use `npm ci` for reproducible installation;
+  the `playwright` version is pinned and must match the installed Chromium revision;
   install Chromium with `npx playwright install chromium`.
 - Follow `.prettierrc.json`: two-space indentation, no semicolons, double quotes,
   and ES5 trailing commas. Avoid unrelated formatting changes.
