@@ -151,6 +151,32 @@ test("fails instead of reporting no notice when the real page is not loaded", as
   assert.equal(browserClosed, true)
 })
 
+test("launches the browser from a custom executable path", async () => {
+  let launchOptions
+  const browserType = {
+    launch: async (options) => {
+      launchOptions = options
+      return {
+        close: async () => {},
+        newPage: async () => ({
+          goto: async () => {},
+          locator: () => ({
+            count: async () => 0,
+            waitFor: async () => Promise.reject(Error("missing")),
+          }),
+          waitForSelector: async () => {},
+        }),
+      }
+    },
+  }
+
+  await fetchEmergencyOutagesNotice({
+    browserType,
+    executablePath: "/usr/bin/chromium",
+  })
+  assert.equal(launchOptions.executablePath, "/usr/bin/chromium")
+})
+
 test("closes the browser when the page fails to load", async () => {
   let browserClosed = false
   const browserType = {

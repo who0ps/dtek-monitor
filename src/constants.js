@@ -1,8 +1,12 @@
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-export const { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_THREAD_ID } =
-  process.env
+export const {
+  CHROMIUM_EXECUTABLE_PATH,
+  TELEGRAM_BOT_TOKEN,
+  TELEGRAM_CHAT_ID,
+  TELEGRAM_THREAD_ID,
+} = process.env
 
 export const SHUTDOWNS_PAGE = "https://www.dtek-kem.com.ua/ua/shutdowns"
 

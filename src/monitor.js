@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url"
 import { chromium } from "playwright"
 
 import {
+  CHROMIUM_EXECUTABLE_PATH,
   EMERGENCY_OUTAGES_MESSAGE_FILE,
   SHUTDOWNS_PAGE,
   TELEGRAM_BOT_TOKEN,
@@ -116,10 +117,14 @@ export async function getEmergencyOutagesNotice(browserPage) {
 
 export async function fetchEmergencyOutagesNotice({
   browserType = chromium,
+  executablePath = CHROMIUM_EXECUTABLE_PATH,
 } = {}) {
   log("🌀 Getting emergency outages notice...")
 
-  const browser = await browserType.launch({ headless: true })
+  const browser = await browserType.launch({
+    headless: true,
+    executablePath: executablePath || undefined,
+  })
 
   try {
     const browserPage = await browser.newPage()

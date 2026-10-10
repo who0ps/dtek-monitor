@@ -47,6 +47,7 @@ Python-версію Playwright) для того ж користувача, Node-
 | `TELEGRAM_BOT_TOKEN` | Токен бота |
 | `TELEGRAM_CHAT_ID` | ID чату або каналу |
 | `TELEGRAM_THREAD_ID` | Необов'язково: ID теми в групі з темами |
+| `CHROMIUM_EXECUTABLE_PATH` | Необов'язково: шлях до вже встановленого Chromium/Chrome (наприклад, `/usr/bin/chromium`). Потрібен, якщо `playwright install chromium` не підтримує вашу платформу; тоді цей крок встановлення можна пропустити |
 
 ## Запуск за розкладом (systemd)
 
