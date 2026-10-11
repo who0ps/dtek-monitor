@@ -21,10 +21,10 @@ import {
   saveEmergencyOutagesState,
   saveLastMessage,
 } from "./helpers.js"
-import { log, logError } from "./logger.js"
+import { debug, log, logError } from "./logger.js"
 
 export async function getEmergencyOutagesNotice(browserPage) {
-  log("🌀 Checking emergency outages notice...")
+  debug("🌀 Checking emergency outages notice...")
 
   const notice = browserPage.locator(".m-attention__text", {
     hasText: /екстрені|не діють/i,
@@ -100,7 +100,7 @@ export async function getEmergencyOutagesNotice(browserPage) {
   } catch (error) {
     try {
       if ((await notice.count()) === 0) {
-        log("🟢 Emergency outages notice is not found.")
+        debug("🟢 Emergency outages notice is not found.")
         return null
       }
     } catch (countError) {
@@ -119,7 +119,7 @@ export async function fetchEmergencyOutagesNotice({
   browserType = chromium,
   executablePath = CHROMIUM_EXECUTABLE_PATH,
 } = {}) {
-  log("🌀 Getting emergency outages notice...")
+  debug("🌀 Getting emergency outages notice...")
 
   const browser = await browserType.launch({
     headless: true,
@@ -139,7 +139,7 @@ export async function fetchEmergencyOutagesNotice({
 
     const notice = await getEmergencyOutagesNotice(browserPage)
 
-    log("✅ Getting emergency outages notice finished.")
+    debug("✅ Getting emergency outages notice finished.")
     return notice
   } catch (error) {
     throw Error(`❌ Getting emergency outages notice failed: ${error.message}`)
@@ -149,7 +149,7 @@ export async function fetchEmergencyOutagesNotice({
 }
 
 export function generateEmergencyOutagesMessage(notice, now = new Date()) {
-  log("🌀 Generating emergency outages message...")
+  debug("🌀 Generating emergency outages message...")
 
   const formattedNotice = Array.isArray(notice?.segments)
     ? notice.segments
@@ -185,7 +185,7 @@ export async function deleteLastNotification({
   const lastMessage = loadLastMessageFn(lastMessageFile) || {}
 
   if (!lastMessage.message_id) {
-    log("🟢 Notification is not found.")
+    debug("🟢 Notification is not found.")
     return true
   }
 
@@ -238,7 +238,7 @@ export async function sendNotification(
     throw Error("❌ Missing telegram bot token or chat id.")
   if (!telegramChatId) throw Error("❌ Missing telegram chat id.")
 
-  log("🌀 Sending notification...")
+  debug("🌀 Sending notification...")
 
   const lastMessage = loadLastMessageFn(lastMessageFile) || {}
   try {
@@ -266,7 +266,7 @@ export async function sendNotification(
         lastMessage.message_id &&
         data.description?.toLowerCase().includes("message is not modified")
       ) {
-        log("🟢 Notification is already up to date.")
+        debug("🟢 Notification is already up to date.")
         return true
       }
 

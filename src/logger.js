@@ -22,6 +22,12 @@ function write(method, values) {
   console[method](`[${getLogTimestamp()}]`, ...values)
 }
 
+// Routine progress messages; printed only when LOG_LEVEL=debug.
+export function debug(...values) {
+  if (process.env.LOG_LEVEL?.trim().toLowerCase() !== "debug") return
+  write("log", values)
+}
+
 export function log(...values) {
   write("log", values)
 }

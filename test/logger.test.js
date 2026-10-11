@@ -1,10 +1,11 @@
 import assert from "node:assert/strict"
 import test, { afterEach, mock } from "node:test"
 
-import { getLogTimestamp, log, logError, warn } from "../src/logger.js"
+import { debug, getLogTimestamp, log, logError, warn } from "../src/logger.js"
 
 afterEach(() => {
   mock.restoreAll()
+  delete process.env.LOG_LEVEL
 })
 
 test("formats log timestamps in the Kyiv time zone", () => {
@@ -38,4 +39,19 @@ test("prefixes informational, warning, and error logs with timestamps", () => {
       ["error", true, "failure"],
     ],
   )
+})
+
+test("prints debug logs only when LOG_LEVEL is debug", () => {
+  const calls = []
+  mock.method(console, "log", (...values) => calls.push(values))
+
+  debug("hidden")
+  process.env.LOG_LEVEL = "info"
+  debug("still hidden")
+  assert.equal(calls.length, 0)
+
+  process.env.LOG_LEVEL = "DEBUG"
+  debug("shown")
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].at(-1), "shown")
 })
