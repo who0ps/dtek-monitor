@@ -32,7 +32,7 @@ export async function getEmergencyOutagesNotice(browserPage) {
 
   try {
     await notice.waitFor({ state: "visible", timeout: 3000 })
-    log("🚨 Emergency outages notice detected!")
+    debug("🚨 Emergency outages notice detected!")
     return await notice.evaluate((element) => {
       const segments = []
 
@@ -275,7 +275,7 @@ export async function sendNotification(
 
     saveLastMessageFn(data.result, lastMessageFile)
 
-    log("🟢 Notification sent.")
+    debug("🟢 Notification sent.")
     return true
   } catch (error) {
     log("🔴 Notification not sent.", error.message)
